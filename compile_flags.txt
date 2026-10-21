@@ -1,0 +1,5 @@
+-std=c11
+-O2
+-Wall
+-Wextra
+-I/opt/homebrew/include

@@ -1,0 +1,5 @@
+# ignore all GameBoy ROMs
+*.gb
+
+# ignore build artifacts
+/gb1k
