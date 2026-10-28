@@ -116,7 +116,7 @@ static struct app_t {
 static void tick_cycle(void);
 
 // show error message and quit
-_Noreturn void fail(const char *fmt, ...) {
+_Noreturn static void fail(const char *fmt, ...) {
 	char message[1024]; va_list va;
 	va_start(va, fmt); SDL_vsnprintf(message, sizeof(message), fmt, va); va_end(va);
 	SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Error!", message, app.window);
