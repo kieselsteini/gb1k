@@ -86,4 +86,3 @@ These are deliberate trade-offs to keep the code small:
 - OAM DMA completes instantly; the HALT bug and the TIMA reload delay aren't emulated
 - Simplified mapper: no RAM-enable handling, no MBC3 real-time clock, no MBC1 multicart wiring
 - No boot ROM: the emulator starts directly in the post-boot DMG state
-- Works only on little-endian machines, as CPU registers using anonymous unions

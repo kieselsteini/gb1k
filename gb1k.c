@@ -76,12 +76,8 @@ static struct gb_t {
 	// CPU system
 	struct {
 		byte halted, ime; // flag if CPU is halted and current interrupt state
-		union {
-			// this works only for little-endian machines right now!!!
-			byte r8[8]; word r16[5]; // arrays of 8-bit / 16-bit registers
-			struct { byte c, b, e, d, l, h, f, a; }; // 8-bit registers
-			struct { word bc, de, hl, af, sp, pc; }; // 16-bit registers
-		};
+		byte a, f, b, c, d, e, h, l; // 8-bit registers
+		word sp, pc; // 16-bit registers
 	} cpu;
 	// PPU system
 	struct {
@@ -191,32 +187,32 @@ static byte bus8(const word addr, const byte data, const bool write) {
 
 // access memory byte through CPU
 static byte mem8(const word addr, const byte data, const bool write) {
-	const byte tmp = bus8(addr, data, write); // perform memory operation
-	tick_cycle(); // always advane one M-cycle on memory access
-	return tmp; // return memory value
+	const byte tmp = bus8(addr, data, write);
+	tick_cycle();
+	return tmp;
 }
 
 // access memory word through CPU
 static word mem16(const word addr, const word data, const bool write) {
 	if (write) {
-		mem8(addr + 0, (byte)(data & 0xff), true); // write lo-byte
-		mem8(addr + 1, (byte)(data >> 8), true); // write hi-byte
+		mem8(addr + 0, (byte)(data & 0xff), true);
+		mem8(addr + 1, (byte)(data >> 8), true);
 		return data;
 	}
-	const byte lo = mem8(addr, 0, false); // grab lo-byte
-	return lo | (mem8(addr + 1, 0, false) << 8); // grab hi-byte and combine
+	const byte lo = mem8(addr, 0, false);
+	return lo | (mem8(addr + 1, 0, false) << 8);
 }
 
 // access stack
 static word stk16(const word data, const bool write) {
 	if (write) {
-		mem8(--gb.cpu.sp, (byte)(data >> 8), true); // write hi-byte
-		mem8(--gb.cpu.sp, (byte)(data & 0xff), true); // write lo-byte
+		mem8(--gb.cpu.sp, (byte)(data >> 8), true);
+		mem8(--gb.cpu.sp, (byte)(data & 0xff), true);
 		tick_cycle(); // tick additional M-cycle
 		return data;
 	}
-	const byte lo = mem8(gb.cpu.sp++, 0, false); // grab lo-byte
-	return lo | (mem8(gb.cpu.sp++, 0, false) << 8); // grab hi-byte and combine
+	const byte lo = mem8(gb.cpu.sp++, 0, false);
+	return lo | (mem8(gb.cpu.sp++, 0, false) << 8);
 }
 
 // fetch next byte
@@ -226,38 +222,41 @@ static byte fetch8(void) {
 
 // fetch next word
 static word fetch16(void) {
-	const byte lo = fetch8(); // fetch lo-byte
-	return lo | (fetch8() << 8); // fetch hi-byte and combine
+	const byte lo = fetch8();
+	return lo | (fetch8() << 8);
 }
 
-// access 16-bit registers for stack usage - BC, DE, HL, AF
-static word r16stk(const byte which, const word data, const bool write) {
-	static const word masks[] = { 0xffff, 0xffff, 0xffff, 0xfff0 }; // define bit-masks for register access
-	return (write ? gb.cpu.r16[which] = (data & masks[which]) : gb.cpu.r16[which]) & masks[which]; // access 16-bit registers
-}
-
-// access 16-bit registers - BC, DE, HL, SP
-static word r16(const byte which, const word data, const bool write) {
-	if (which == 3) return write ? gb.cpu.sp = data : gb.cpu.sp; // handle SP case
-	return write ? gb.cpu.r16[which] = data : gb.cpu.r16[which]; // handle all other cases
-}
-
-// access 16-bit registers for memory usage - BC, DE, HL+, HL-
-static byte r16mem(const byte which, const byte data, const bool write) {
-	static const byte mapping[] = { 0, 1, 2, 2 }; // map which to r16
-	static const int8_t delta[] = { 0, 0, 1, -1 }; // map which to delta
-	const byte r = mapping[which]; // get 16-bit register we are going to use
-	const byte tmp = mem8(gb.cpu.r16[r], data, write); // perform the memory operation
-	gb.cpu.r16[r] += delta[which]; // apply register adjustment after the operation
-	return tmp; // return memory value
-}
-
-// access 8-bit registers/memory - B, C, D, E, H, L, (HL), A
+// access r8 register group - B, C, D, E, H, L, (HL), A
 static byte r8(const byte which, const byte data, const bool write) {
-	static const byte mapping[]= { 1, 0, 3, 2, 5, 4, 0, 7 }; // mapping for 8-bit registers
-	if (which == 6) return mem8(gb.cpu.hl, data, write); // handle (HL) case
-	const byte r = mapping[which]; // get 8-bit register we are going to use
-	return write ? gb.cpu.r8[r] = data : gb.cpu.r8[r]; // access register
+	static byte *r[] = { &gb.cpu.b, &gb.cpu.c, &gb.cpu.d, &gb.cpu.e, &gb.cpu.h, &gb.cpu.l, NULL, &gb.cpu.a };
+	if (which == 6) return mem8((gb.cpu.h << 8) | gb.cpu.l, data, write);
+	return write ? *r[which] = data : *r[which];
+}
+
+// access r16 register group - BC, DE, HL, SP
+static word r16(const byte which, const word data, const bool write) {
+	static byte *r[] = { &gb.cpu.b, &gb.cpu.c, &gb.cpu.d, &gb.cpu.e, &gb.cpu.h, &gb.cpu.l };
+	if (which == 3) return write ? gb.cpu.sp = data : gb.cpu.sp;
+	if (write) { *r[which * 2] = (byte)(data >> 8); *r[which * 2 + 1] = (byte)(data & 0xff); return data; }
+	return (*r[which * 2] << 8) | *r[which * 2 + 1];
+}
+
+// access r16stk register group - BC, DE, HL, AF
+static word r16stk(const byte which, const word data, const bool write) {
+	static byte *r[] = { &gb.cpu.b, &gb.cpu.c, &gb.cpu.d, &gb.cpu.e, &gb.cpu.h, &gb.cpu.l, &gb.cpu.a, &gb.cpu.f };
+	static const byte m[] = { 0xff, 0xff, 0xff, 0xf0 };
+	if (write) { *r[which * 2] = (byte)(data >> 8); *r[which * 2 + 1] = (byte)(data & m[which]); return data; }
+	return (*r[which * 2] << 8) | (*r[which * 2 + 1] & m[which]);
+}
+
+// access r16mem register group - (BC), (DE), (HL+), (HL-)
+static byte r16mem(const byte which, const byte data, const bool write) {
+	static const byte m[] = { 0, 1, 2, 2 };
+	static const int8_t d[] = { 0, 0, 1, -1 };
+	const word addr = r16(m[which], 0, false);
+	const byte tmp = mem8(addr, data, write);
+	r16(m[which], addr + d[which], true);
+	return tmp;
 }
 
 // check opcode condition - NZ, Z, NC, C
@@ -313,9 +312,10 @@ static byte bit8(const byte which, const byte data) {
 
 // add value to HL
 static word add_hl(const word data) {
-	const uint32_t tmp = gb.cpu.hl + data; // create temporary 32-bit result
-	set_flags(ZF, 0, false, ((gb.cpu.hl & 0x0fff) + (data & 0x0fff)) & 0xf000, tmp & 0xffff0000);
-	gb.cpu.hl = (word)(tmp & 0xffff);
+	const word hl = r16(2, 0, false);
+	const uint32_t tmp = hl + data;
+	set_flags(ZF, 0, false, ((hl & 0x0fff) + (data & 0x0fff)) & 0xf000, tmp & 0xffff0000);
+	r16(2, (word)(tmp & 0xffff), true);
 	tick_cycle();
 	return (word)(tmp & 0xffff);
 }
@@ -385,7 +385,7 @@ static void execute_opcode(void) {
 		OP1(0xea, mem8(fetch16(), gb.cpu.a, true)) // LD (a16), A
 		OP1(0xfa, gb.cpu.a = mem8(fetch16(), 0, false)) // LD A, (a16)
 		OP1(0x08, mem16(fetch16(), gb.cpu.sp, true)) // LD (a16), SP
-		OP1(0xf9, gb.cpu.sp = gb.cpu.hl; tick_cycle()) // LD SP, HL
+		OP1(0xf9, gb.cpu.sp = r16(2, 0, false); tick_cycle()) // LD SP, HL
 		OP64(0x40,
 			if (opcode == 0x76) { gb.cpu.halted = true; break;} // HALT
 			r8(opcrel / 8, r8(opcrel % 8, 0, false), true); // LD r8, r8
@@ -400,11 +400,11 @@ static void execute_opcode(void) {
 		OP4x(0x07, 8, gb.cpu.a = bit8(opcrel, gb.cpu.a); gb.cpu.f &= CF) // RLCA, RRCA, RLA, RRA
 		OP4x(0x09, 16, add_hl(r16(opcrel, 0, false))) // ADD HL, r16
 		OP1(0xe8, gb.cpu.sp = add_sp_e8(); tick_cycle()) // ADD SP, e8
-		OP1(0xf8, gb.cpu.hl = add_sp_e8()) // LD HL, SP+e8
+		OP1(0xf8, r16(2, add_sp_e8(), true)) // LD HL, SP+e8
 		// subroutine instructions -------------------------------------------------------------------------------------
 		OP1(0x18, gosub(true, false, true)) // JR e8
 		OP4x(0x20, 8, gosub(opcond(opcrel), false, true)) // JR cond, e8
-		OP1(0xe9, gb.cpu.pc = gb.cpu.hl) // JP HL
+		OP1(0xe9, gb.cpu.pc = r16(2, 0, false)) // JP HL
 		OP1(0xc3, gosub(true, false, false)) // JP a16
 		OP4x(0xc2, 8, gosub(opcond(opcrel), false, false)) // JP cond, a16
 		OP1(0xcd, gosub(true, true, false)) // CALL a16
@@ -775,7 +775,7 @@ static void save_battery_ram(void) {
 static void init_gameboy(const char *filename) {
 	// prepare the GameBoy state and load the DMG register values after the boot ROM
 	gb = (struct gb_t){
-		.cpu = { .af = 0x01b0, .bc = 0x0013, .de = 0x00d8, .hl = 0x014d, .sp = 0xfffe, .pc = 0x0100 },
+		.cpu = { .a = 0x01, .f = 0xb0, .b = 0x00, .c = 0x13, .d = 0x00, .e = 0xd8, .h = 0x01, .l = 0x4d, .sp = 0xfffe, .pc = 0x0100 },
 		.timer = { .div = 0xabcc },
 		.io = {
 			.joyp = 0xcf, .sc = 0x7e, .div = 0xab, .tac = 0xf8, .ifr = 0xe1,
