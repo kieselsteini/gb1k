@@ -2,4 +2,5 @@
 *.gb
 
 # ignore build artifacts
+/bootix_dmg.bin
 /gb1k
