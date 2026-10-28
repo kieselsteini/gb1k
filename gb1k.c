@@ -875,6 +875,7 @@ SDL_AppResult SDL_AppEvent(void *appstate, SDL_Event *event) {
 			return SDL_APP_SUCCESS;
 		case SDL_EVENT_GAMEPAD_ADDED:
 			SDL_OpenGamepad(event->gdevice.which);
+			app.last = SDL_GetTicksNS(); // plug in gamepad take quite some time ...
 			return SDL_APP_CONTINUE;
 		case SDL_EVENT_KEY_DOWN:
 		case SDL_EVENT_KEY_UP:
