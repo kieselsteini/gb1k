@@ -81,7 +81,7 @@ static struct gb_t {
 	} cpu;
 	// PPU system
 	struct {
-		byte ready, mode; // flag to indicate the the buffer is ready and keep the mode
+		byte ready, mode, wnd, wly; // buffer ready flag, internal mode, window condition and window line counter
 		word lx, ly; // current X/Y position during rendering
 		uint32_t buffer[VIDEO_WIDTH * VIDEO_HEIGHT]; // 32-bit RGBA screen buffer
 	} ppu;
@@ -494,7 +494,7 @@ static void render_scanline(void) {
 		{ 0x9ff4e5ff, 0x00b9beff, 0x005f8cff, 0x002b59ff },
 	};
 	const int y = gb.ppu.ly;
-	const bool wnd = (gb.io.lcdc & BIT(5)) && (y >= gb.io.wy);
+	const bool wnd = (gb.io.lcdc & BIT(5)) && gb.ppu.wnd && (gb.io.wx <= 166);
 	const int objh = (gb.io.lcdc & BIT(2)) ? 16 : 8;
 
 	// We iterate just once over OAM and render sprites in a temporary scanline we later mix with background.
@@ -531,7 +531,7 @@ static void render_scanline(void) {
 		// check if background/window is enabled
 		if (gb.io.lcdc & BIT(0)) {
 			if (wnd && (x >= (gb.io.wx - 7))) {
-				const byte sx = (x - (gb.io.wx - 7)) % 256, sy = (y - gb.io.wy) % 256;
+				const byte sx = (x - (gb.io.wx - 7)) % 256, sy = gb.ppu.wly;
 				const byte tile = gb.mem.maps[(gb.io.lcdc >> 6) & 1][sy / 8][sx / 8];
 				bgpixel = tile_pixel(tile, sx % 8, sy % 8, gb.io.lcdc & BIT(4));
 			} else {
@@ -546,28 +546,33 @@ static void render_scanline(void) {
 		if (row[x] && (!((row[x] & 0x80) && bgpixel))) color = row[x] & 3;
 		gb.ppu.buffer[y * VIDEO_WIDTH + x] = palette[app.palette % 4][color];
 	}
+
+	// The window has its own internal line counter which only advances on scanlines where the window was
+	// actually rendered. It is not derived from LY/WY, so games can move the window around mid-frame.
+	if (wnd && (gb.io.lcdc & BIT(0))) gb.ppu.wly++;
 }
 
 // run PPU
 static void run_ppu(void) {
 	// check if PPU is active
-	if (!(gb.io.lcdc & BIT(7))) {
-		gb.io.stat &= 0x78; // reset status register
-		gb.io.ly = 0; // reset LY register
-		gb.ppu.lx = gb.ppu.ly = gb.ppu.mode = 0; // reset internal X/Y and mode
+	if (!(gb.io.lcdc & BIT(7))) { // reset the internal PPU state
+		gb.io.stat &= 0x78;
+		gb.io.ly = 0;
+		gb.ppu.lx = gb.ppu.ly = gb.ppu.mode = gb.ppu.wnd = gb.ppu.wly = 0;
 		return;
 	}
 	// run the PPU 4 times
 	for (byte i = 0; i < 4; ++i) {
 		// update the PPU state machine based on lx/ly
 		if (gb.ppu.ly < 144) {
-			if (gb.ppu.lx == 0) { change_ppu_mode(PPU_OAM); }
+			if (gb.ppu.lx == 0) { change_ppu_mode(PPU_OAM); if (gb.ppu.ly == gb.io.wy) gb.ppu.wnd = true; }
 			else if (gb.ppu.lx == 80) { change_ppu_mode(PPU_PIXELS); }
 			else if (gb.ppu.lx == 80 + 172) { change_ppu_mode(PPU_HBLANK); render_scanline(); }
 		} else if ((gb.ppu.ly == 144) && (gb.ppu.lx == 0)) {
 			change_ppu_mode(PPU_VBLANK);
 			request_interrupt(INT_VBLANK);
 			gb.ppu.ready = true;
+			gb.ppu.wnd = gb.ppu.wly = 0;
 		}
 		// advance X+Y and fire interrupt when LY==LYC and it's requested, finally make sure I/O has current values
 		if (++gb.ppu.lx >= 456) {
