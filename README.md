@@ -57,6 +57,7 @@ The window opens at about 80% of your desktop size and can be resized freely. Th
 | Hotkey | Action |
 |---|---|
 | `F1`–`F4` | Toggle audio channel 1–4 on/off (pulse 1, pulse 2, wave, noise; useful for audio debugging) |
+| `F5`| Toggle turbo mode (make CPU 4x as fast) |
 | `F9` | Cycle colour palette (grey, classic green, sepia, blue) |
 | `F10` | Cycle volume (100% → 50% → 25% → mute) |
 | `Esc` | Quit |

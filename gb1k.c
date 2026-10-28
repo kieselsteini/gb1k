@@ -108,6 +108,7 @@ static struct app_t {
 	SDL_AudioDeviceID device; // SDL audio device object
 	SDL_AudioStream *stream; // SDL audio stream object
 	byte palette, volume, channels; // currently selected color palette, volume level and sound channels
+	byte turbo_enabled, turbo_count; // flag for turbo mode and the turbo counter
 	char *prefpath; // path where we store our save-files
 } app;
 
@@ -736,6 +737,18 @@ static void run_apu(const bool edge) {
 
 // tick one M-cycle for the emulation
 static void tick_cycle(void) {
+	// update joypad inputs - this must be done every cycle (even in speed mode)
+	byte btn = 0;
+	if (!(gb.io.joyp & BIT(4))) btn |= app.buttons >> 4; // dpad buttons requested
+	if (!(gb.io.joyp & BIT(5))) btn |= app.buttons & 0x0f; // action buttons requested
+	gb.io.joyp = (gb.io.joyp & 0x30) | (btn ^ 0x0f);
+
+	// turbo mode acts a 4x times faster CPU
+	if (app.turbo_enabled) {
+		if (++app.turbo_count < 4) return;
+		app.turbo_count = 0;
+	}
+
 	// advance the M-cycles and DIV timer
 	gb.timer.cycles++;
 	const word odiv = gb.timer.div;
@@ -750,12 +763,6 @@ static void tick_cycle(void) {
 			request_interrupt(INT_TIMER);
 		}
 	}
-
-	// update joypad inputs
-	byte btn = 0;
-	if (!(gb.io.joyp & BIT(4))) btn |= app.buttons >> 4; // dpad buttons requested
-	if (!(gb.io.joyp & BIT(5))) btn |= app.buttons & 0x0f; // action buttons requested
-	gb.io.joyp = (gb.io.joyp & 0x30) | (btn ^ 0x0f);
 
 	// run PPU + APU in sync
 	run_ppu(); run_apu(falling_edge(odiv, gb.timer.div, 12));
@@ -884,6 +891,7 @@ SDL_AppResult SDL_AppEvent(void *appstate, SDL_Event *event) {
 				default: return SDL_APP_CONTINUE;
 				case SDLK_ESCAPE: return SDL_APP_SUCCESS;
 				case SDLK_F1: case SDLK_F2: case SDLK_F3: case SDLK_F4: if (down) app.channels ^= BIT(event->key.key - SDLK_F1); return SDL_APP_CONTINUE;
+				case SDLK_F5: if (down) app.turbo_enabled = !app.turbo_enabled; return SDL_APP_CONTINUE;
 				case SDLK_F9: if (down) app.palette++; return SDL_APP_CONTINUE;
 				case SDLK_F10: if (down) app.volume++; return SDL_APP_CONTINUE;
 				case SDLK_W: case SDLK_8: case SDLK_KP_8: case SDLK_UP: btn = BTN_UP; break;
