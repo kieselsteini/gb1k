@@ -702,6 +702,7 @@ static void output_sample(void) {
 	gb.apu.count = 0;
 	if (gb.apu.pos >= SDL_arraysize(gb.apu.buffer)) {
 		gb.apu.pos = 0;
+		if (SDL_GetAudioStreamAvailable(app.stream) > ((int)sizeof(gb.apu.buffer) * 16)) return; // prevent overflow of audio queue
 		if (!SDL_PutAudioStreamData(app.stream, gb.apu.buffer, sizeof(gb.apu.buffer))) fail("SDL_PutAudioStreamData() error: %s", SDL_GetError());
 	}
 }
