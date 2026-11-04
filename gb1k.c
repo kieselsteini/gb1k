@@ -922,7 +922,7 @@ SDL_AppResult SDL_AppEvent(void *appstate, SDL_Event *event) {
 				default: return SDL_APP_CONTINUE;
 				case SDLK_ESCAPE: return SDL_APP_SUCCESS;
 				case SDLK_F1: case SDLK_F2: case SDLK_F3: case SDLK_F4: if (down) app.channels ^= BIT(event->key.key - SDLK_F1); return SDL_APP_CONTINUE;
-				case SDLK_F5: load_rom_dialog(); return SDL_APP_CONTINUE;
+				case SDLK_F5: if (down && !event->key.repeat) load_rom_dialog(); return SDL_APP_CONTINUE;
 				case SDLK_F9: if (down) app.palette++; return SDL_APP_CONTINUE;
 				case SDLK_F10: if (down) app.volume++; return SDL_APP_CONTINUE;
 				case SDLK_F11: if (down) app.turbo_enabled = !app.turbo_enabled; return SDL_APP_CONTINUE;
