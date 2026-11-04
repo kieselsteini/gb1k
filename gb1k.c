@@ -23,6 +23,7 @@
 enum {
 	TICK_RATE = 60, // GameBoy run with ~60Hz
 	TICK_TIME = 1000000000 / TICK_RATE, // time for a single tick
+	TICK_BACKLOG = TICK_TIME * 4, // upper limit of catch-up time, so a hitch cannot spiral
 	VIDEO_WIDTH = 160, // video width in pixels
 	VIDEO_HEIGHT = 144, // video height in pixels
 	CYCLE_COUNT = 70224 / 4, // M-cycles per tick
@@ -966,6 +967,7 @@ SDL_AppResult SDL_AppIterate(void *appstate) {
 		const uint64_t now = SDL_GetTicksNS();
 		app.accu += now - app.last;
 		app.last = now;
+		if (app.accu > TICK_BACKLOG) app.accu = TICK_BACKLOG; // drop the backlog a long stall built up, instead of chasing it forever
 		// do GameBoy emulation cycles
 		for (; app.accu >= TICK_TIME; app.accu -= TICK_TIME) {
 			const uint32_t start = gb.timer.cycles; // save current cycle count
