@@ -808,24 +808,6 @@ static void save_battery_ram(void) {
 
 // initialize the GameBoy
 static void init_gameboy(const char *filename) {
-	/*
-	// prepare the GameBoy state and load the DMG register values after the boot ROM
-	gb = (struct gb_t){
-		.cpu = { .a = 0x01, .f = 0xb0, .b = 0x00, .c = 0x13, .d = 0x00, .e = 0xd8, .h = 0x01, .l = 0x4d, .sp = 0xfffe, .pc = 0x0100 },
-		.timer = { .div = 0xabcc },
-		.io = {
-			.joyp = 0xcf, .sc = 0x7e, .div = 0xab, .tac = 0xf8, .ifr = 0xe1,
-			.ch = { // NRx4 trigger bit (bit 7) is cleared, otherwise the channels would trigger on the first APU cycle
-				{ 0x80, 0xbf, 0xf3, 0xff, 0x3f }, // NR10 - NR14
-				{ 0xff, 0x3f, 0x00, 0xff, 0x3f }, // NR20 - NR24
-				{ 0x7f, 0xff, 0x9f, 0xff, 0x3f }, // NR30 - NR34
-				{ 0xff, 0xff, 0x00, 0x00, 0x3f }, // NR40 - NR44
-			},
-			.nr50 = 0x77, .nr51 = 0xf3, .nr52 = 0xf1,
-			.lcdc = 0x91, .stat = 0x85, .dma = 0xff, .bgp = 0xfc, .obp = { 0xff, 0xff },
-		},
-	};
-	*/
 	gb = (struct gb_t){ .mem.boot = true };
 	// load the ROM file and setup banking
 	size_t bytes;
@@ -835,7 +817,6 @@ static void init_gameboy(const char *filename) {
 	if (bytes >= KiB(1024 *4)) fail("ROM is larger than 4MiB");
 	gb.mem.rom_size = bytes / KiB(16);
 	gb.mem.rom_base = KiB(16) * 1;
-	if (!gb.mem.rom[0x014d]) gb.cpu.f = ZF; // H and C flags are only set if the header checksum is not zero
 	// check for battery in cartridge - list of mappers with battery included
 	static const bool bat[] = {[0x03]=true,[0x06]=true,[0x09]=true,[0x0d]=true,[0x0f]=true,[0x10]=true,[0x13]=true,[0x1b]=true,[0x1e]=true,[0xff]=true};
 	gb.mem.battery = bat[gb.mem.rom[0x0147]];
