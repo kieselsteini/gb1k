@@ -457,7 +457,6 @@ static void execute_opcode(void) {
 		// error case --------------------------------------------------------------------------------------------------
 		default: fail("illegal opcode $%02x at $%04x", opcode, (word)(gb.cpu.pc - 1));
 	}
-	#undef OP1
 }
 
 // run CPU cycle
