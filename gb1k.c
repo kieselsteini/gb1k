@@ -696,7 +696,7 @@ static int channel_sample(const int i, chan_t *ch, struct ioch_t *io, const word
 			static const byte volume[] = { 0, 4, 2, 1 }; // 0 = mute, 1 = 100%, 2 = 50%, 3 = 25% (in quarters)
 			const byte level = (io->nrx2 >> 5) & 0x03;
 			const int s = ((gb.io.wave[ch->step / 2] >> ((ch->step & 1) ? 0: 4)) & 0x0f) - 8; // upper nibble first
-			return s * 4 * volume[level];
+			return s * 8 * volume[level];
 		}
 		case 3: { // Noise Channel
 			if (!update_length_and_envelope(ch, io, odiv)) return 0;
