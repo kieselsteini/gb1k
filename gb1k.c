@@ -110,6 +110,7 @@ static struct app_t {
 	byte palette, volume, channels; // currently selected color palette, volume level and sound channels
 	byte turbo_enabled, turbo_count; // flag for turbo mode and the turbo counter
 	char *prefpath; // path where we store our save-files
+	SDL_AtomicInt running; // flag if the ROM is loaded and we can start emulation
 } app;
 
 // the initial boot rom - https://github.com/Ashiepaws/Bootix - CC0
@@ -807,13 +808,15 @@ static void save_battery_ram(void) {
 
 // initialize the GameBoy
 static void init_gameboy(const char *filename) {
+	// reset GameBoy state and check if we have to query for a ROM
+	if (gb.mem.rom) SDL_free(gb.mem.rom);
 	gb = (struct gb_t){ .mem.boot = true };
 	// load the ROM file and setup banking
 	size_t bytes;
 	if (!(gb.mem.rom = SDL_LoadFile(filename, &bytes))) fail("Failed to load ROM: %s", SDL_GetError());
 	if (bytes < KiB(32)) fail("ROM is smaller than 32KiB");
 	if (bytes % KiB(16)) fail("ROM is not a multiple of 16KiB");
-	if (bytes >= KiB(1024 *4)) fail("ROM is larger than 4MiB");
+	if (bytes >= KiB(1024*4)) fail("ROM is larger than 4MiB");
 	gb.mem.rom_size = bytes / KiB(16);
 	gb.mem.rom_base = KiB(16) * 1;
 	// check for battery in cartridge - list of mappers with battery included
@@ -826,12 +829,31 @@ static void init_gameboy(const char *filename) {
 	const char *title = strf("%s - %.16s", WINDOW_TITLE, (const char*)&gb.mem.rom[0x0134]);
 	SDL_SetWindowTitle(app.window, title);
 	// load battery-ram if present
-	if (!gb.mem.battery) return;
-	const char *savename = strf("%ssave.%08x.ram", app.prefpath, gb.mem.rom_hash);
-	SDL_IOStream *strm = SDL_IOFromFile(savename, "rb");
-	if (!strm) return;
-	SDL_ReadIO(strm, gb.mem.xram, sizeof(gb.mem.xram));
-	SDL_CloseIO(strm);
+	if (gb.mem.battery) {
+		const char *savename = strf("%ssave.%08x.ram", app.prefpath, gb.mem.rom_hash);
+		SDL_IOStream *strm = SDL_IOFromFile(savename, "rb");
+		if (!strm) return;
+		SDL_ReadIO(strm, gb.mem.xram, sizeof(gb.mem.xram));
+		SDL_CloseIO(strm);
+	}
+	app.last = SDL_GetTicksNS(); // loading ROM needs a reset in timing
+	SDL_SetAtomicInt(&app.running, true);
+}
+
+// ROM picker callback
+static void rom_picker_callback(void *userdata, const char * const *filelist, int filter) {
+	(void)userdata; (void)filter;
+	if (setjmp(app.error)) return;
+	if (!filelist || !filelist[0]) fail("No ROM selected!");
+	init_gameboy(filelist[0]);
+}
+
+// show file picker for ROM
+static void load_rom_dialog(void) {
+	static const SDL_DialogFileFilter filters[] = {{ .name = "GameBoy ROM", .pattern = "gb" }};
+	SDL_SetAtomicInt(&app.running, false);
+	SDL_SetWindowTitle(app.window, strf("%s - Selecting ROM ...", WINDOW_TITLE));
+	SDL_ShowOpenFileDialog(rom_picker_callback, NULL, app.window, filters, 1, NULL, false);
 }
 
 // callback to initialize the application
@@ -839,6 +861,7 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char **argv) {
 	(void)appstate;
 	// init core system
 	app = (struct app_t){0};
+	gb = (struct gb_t){0};
 	if (setjmp(app.error)) return SDL_APP_FAILURE;
 	if (!SDL_Init(SDL_INIT_AUDIO | SDL_INIT_VIDEO | SDL_INIT_GAMEPAD | SDL_INIT_EVENTS)) fail("SDL_Init() error: %s", SDL_GetError());
 	if (!(app.prefpath = SDL_GetPrefPath("kieselsteini", "gb1k"))) fail("SDL_GetPrefPath() error: %s", SDL_GetError());
@@ -861,11 +884,8 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char **argv) {
 	if (!(app.device = SDL_OpenAudioDevice(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, NULL))) fail("SDL_OpenAudioDevice() error: %s", SDL_GetError());
 	if (!(app.stream = SDL_CreateAudioStream(&have, NULL))) fail("SDL_CreateAudioStream() error: %s", SDL_GetError());
 	if (!SDL_BindAudioStream(app.device, app.stream)) fail("SDL_BindAudioStream() error: %s", SDL_GetError());
-	// init gameboy
-	if (argc < 2) fail("Please specify a GameBoy ROM file.");
-	init_gameboy(argv[1]);
-	// init timer
-	app.last = SDL_GetTicksNS();
+	// init gameboy + timer
+	if (argc > 1) init_gameboy(argv[1]); else load_rom_dialog();
 	return SDL_APP_CONTINUE;
 }
 
@@ -902,9 +922,10 @@ SDL_AppResult SDL_AppEvent(void *appstate, SDL_Event *event) {
 				default: return SDL_APP_CONTINUE;
 				case SDLK_ESCAPE: return SDL_APP_SUCCESS;
 				case SDLK_F1: case SDLK_F2: case SDLK_F3: case SDLK_F4: if (down) app.channels ^= BIT(event->key.key - SDLK_F1); return SDL_APP_CONTINUE;
-				case SDLK_F5: if (down) app.turbo_enabled = !app.turbo_enabled; return SDL_APP_CONTINUE;
+				case SDLK_F5: load_rom_dialog(); return SDL_APP_CONTINUE;
 				case SDLK_F9: if (down) app.palette++; return SDL_APP_CONTINUE;
 				case SDLK_F10: if (down) app.volume++; return SDL_APP_CONTINUE;
+				case SDLK_F11: if (down) app.turbo_enabled = !app.turbo_enabled; return SDL_APP_CONTINUE;
 				case SDLK_W: case SDLK_8: case SDLK_KP_8: case SDLK_UP: btn = BTN_UP; break;
 				case SDLK_S: case SDLK_2: case SDLK_KP_2: case SDLK_DOWN: btn = BTN_DOWN; break;
 				case SDLK_A: case SDLK_4: case SDLK_KP_4: case SDLK_LEFT: btn = BTN_LEFT; break;
@@ -939,23 +960,26 @@ SDL_AppResult SDL_AppEvent(void *appstate, SDL_Event *event) {
 SDL_AppResult SDL_AppIterate(void *appstate) {
 	(void)appstate;
 	if (setjmp(app.error)) return SDL_APP_FAILURE;
-	// update the accumulated delta time
-	const uint64_t now = SDL_GetTicksNS();
-	app.accu += now - app.last;
-	app.last = now;
-	// do GameBoy emulation cycles
-	for (; app.accu >= TICK_TIME; app.accu -= TICK_TIME) {
-		const uint32_t start = gb.timer.cycles; // save current cycle count
-		gb.ppu.ready = false; // reset PPU ready state
-		while (((gb.timer.cycles - start) < CYCLE_COUNT) && (!gb.ppu.ready)) run_cpu(); // run until frame is ready or time is up
-		gb.timer.cycles -= start; // subtract the previous saved cycle count
-	}
-	// update the screen
-	if (gb.ppu.ready) {
-		if (!SDL_UpdateTexture(app.texture, NULL, gb.ppu.buffer, VIDEO_WIDTH * 4)) fail("SDL_UpdateTexture() error: %s", SDL_GetError());
+	const bool running = SDL_GetAtomicInt(&app.running);
+	if (running) {
+		// update the accumulated delta time
+		const uint64_t now = SDL_GetTicksNS();
+		app.accu += now - app.last;
+		app.last = now;
+		// do GameBoy emulation cycles
+		for (; app.accu >= TICK_TIME; app.accu -= TICK_TIME) {
+			const uint32_t start = gb.timer.cycles; // save current cycle count
+			gb.ppu.ready = false; // reset PPU ready state
+			while (((gb.timer.cycles - start) < CYCLE_COUNT) && (!gb.ppu.ready)) run_cpu(); // run until frame is ready or time is up
+			gb.timer.cycles -= start; // subtract the previous saved cycle count
+		}
+		// update the screen
+		if (gb.ppu.ready) {
+			if (!SDL_UpdateTexture(app.texture, NULL, gb.ppu.buffer, VIDEO_WIDTH * 4)) fail("SDL_UpdateTexture() error: %s", SDL_GetError());
+		}
 	}
 	if (!SDL_RenderClear(app.renderer)) fail("SDL_RenderClear() error: %s", SDL_GetError());
-	if (!SDL_RenderTexture(app.renderer, app.texture, NULL, NULL)) fail("SDL_RenderTexture() error: %s", SDL_GetError());
+	if (running) { if (!SDL_RenderTexture(app.renderer, app.texture, NULL, NULL)) fail("SDL_RenderTexture() error: %s", SDL_GetError()); }
 	if (!SDL_RenderPresent(app.renderer)) fail("SDL_RenderPresent() error: %s", SDL_GetError());
 	return SDL_APP_CONTINUE;
 }

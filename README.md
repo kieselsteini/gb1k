@@ -2,7 +2,7 @@
 
 A compact Nintendo Game Boy (DMG) emulator in a single C file of under 1000 lines, built on [SDL3](https://libsdl.org).
 
-GB1k isn't trying to be cycle-perfect. It aims for the smallest, most readable code that still plays the classic library well, including Tetris, Super Mario Land 1 & 2, Zelda: Link's Awakening, Mega Man I–V, Wario Land, DuckTales and Pokémon Red/Yellow.
+GB1k isn't trying to be cycle-perfect. It aims for the smallest, most readable code that still plays the classic library well, including Tetris, Super Mario Land 1 & 2, Zelda: Link's Awakening, Mega Man I–V, Wario Land, DuckTales 1+2 and Pokémon Red/Yellow.
 
 ## Features
 
@@ -37,7 +37,10 @@ make
 The code is plain C11 with no compiler extensions; it builds cleanly with `-Wpedantic`.
 
 ## Usage
-
+```bash
+./gb1k
+```
+Or start directly with a ROM file:
 ```bash
 ./gb1k path/to/game.gb
 ```
@@ -57,9 +60,10 @@ The window opens at about 80% of your desktop size and can be resized freely. Th
 | Hotkey | Action |
 |---|---|
 | `F1`–`F4` | Toggle audio channel 1–4 on/off (pulse 1, pulse 2, wave, noise; useful for audio debugging) |
-| `F5`| Toggle turbo mode (make CPU 4x as fast) |
+| `F5` | Open new ROM file |
 | `F9` | Cycle colour palette (grey, classic green, sepia, blue) |
 | `F10` | Cycle volume (100% → 50% → 25% → mute) |
+| `F11`| Toggle turbo mode (make CPU 4x as fast) |
 | `Esc` | Quit |
 
 Both `Z` and `Y` map to A so the layout works on QWERTY and QWERTZ keyboards.
