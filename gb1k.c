@@ -176,10 +176,10 @@ static void request_interrupt(const byte n) {
 static byte bus8(const word addr, const byte data, const bool write) {
 	switch (addr / KiB(8)) {
 		case 0: // ROM bank 00
-			if (write) return 0;
+			if (write) break;
 			if ((addr <= 0xff) && (gb.mem.boot)) return boot_rom[addr & 0xff];
 		case 1: // ROM bank 00
-			if (write) { const byte bank = data % gb.mem.rom_size; gb.mem.rom_base = (bank ? bank : 1) * KiB(16); }
+			if (write) { const byte bank = data % gb.mem.rom_size; gb.mem.rom_base = (bank ? bank : 1) * KiB(16); break; }
 			return gb.mem.rom[addr & 0x3fff];
 		case 2: // ROM bank 01 - nn
 			if (write) gb.mem.ram_base = (data % 4) * KiB(8);
