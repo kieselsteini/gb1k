@@ -53,7 +53,7 @@ static struct gb_t {
 	// memory system
 	struct {
 		byte *rom, rom_size; // ROM data and size in banks
-		byte wram[KiB(8)], xram[KiB(32)], battery, boot; // work- and external-ram and flag if we have battery
+		byte wram[KiB(8)], xram[KiB(32)], battery; // work- and external-ram and flag if we have battery
 		uint32_t rom_base, ram_base, rom_hash; // base pointers for ROM/RAM banks, and 32-bit hash value for the ROM
 		union { byte oram[256]; struct obj_t { byte y, x, tile, attr; } obj[40]; }; // OAM with attributes
 		union { byte vram[KiB(8)]; struct { byte pixels[384][8][2], maps[2][32][32]; };}; // 384 tiles and two 32x32 tile-maps
@@ -66,7 +66,7 @@ static struct gb_t {
 			struct ioch_t { byte nrx0, nrx1, nrx2, nrx3, nrx4; } ch[4];
 			byte nr50, nr51, nr52, X4[9], wave[16];
 			byte lcdc, stat, scy, scx, ly, lyc, dma, bgp, obp[2], wy, wx;
-			byte X5[179], ier;
+			byte X5[4], bank, X6[174], ier;
 		};
 	} io;
 	// timer system
@@ -177,7 +177,7 @@ static byte bus8(const word addr, const byte data, const bool write) {
 	switch (addr / KiB(8)) {
 		case 0: // ROM bank 00
 			if (write) break;
-			if ((addr <= 0xff) && (gb.mem.boot)) return boot_rom[addr & 0xff];
+			if ((addr <= 0xff) && (!gb.io.bank)) return boot_rom[addr & 0xff];
 		case 1: // ROM bank 00
 			if (write) { const byte bank = data % gb.mem.rom_size; gb.mem.rom_base = (bank ? bank : 1) * KiB(16); break; }
 			return gb.mem.rom[addr & 0x3fff];
@@ -200,7 +200,6 @@ static byte bus8(const word addr, const byte data, const bool write) {
 				switch (addr) {
 					case 0xff04: gb.timer.div = 0; break; // reset DIV
 					case 0xff46: for (int i = 0; i < 40 * 4; ++i) gb.mem.oram[i] = bus8((data << 8) + i, 0, false); break; // do DMA
-					case 0xff50: gb.mem.boot = false; break;
 					default: gb.io.mem[addr & 0xff] = data; break;
 				}
 			} else {
@@ -811,7 +810,7 @@ static void save_battery_ram(void) {
 static void init_gameboy(const char *filename) {
 	// reset GameBoy state and check if we have to query for a ROM
 	if (gb.mem.rom) SDL_free(gb.mem.rom);
-	gb = (struct gb_t){ .mem.boot = true };
+	gb = (struct gb_t){};
 	// load the ROM file and setup banking
 	size_t bytes;
 	if (!(gb.mem.rom = SDL_LoadFile(filename, &bytes))) fail("Failed to load ROM: %s", SDL_GetError());
