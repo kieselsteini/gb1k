@@ -832,9 +832,10 @@ static void init_gameboy(const char *filename) {
 	if (gb.mem.battery) {
 		const char *savename = strf("%ssave.%08x.ram", app.prefpath, gb.mem.rom_hash);
 		SDL_IOStream *strm = SDL_IOFromFile(savename, "rb");
-		if (!strm) return;
-		SDL_ReadIO(strm, gb.mem.xram, sizeof(gb.mem.xram));
-		SDL_CloseIO(strm);
+		if (strm) {
+			SDL_ReadIO(strm, gb.mem.xram, sizeof(gb.mem.xram));
+			SDL_CloseIO(strm);
+		}
 	}
 	app.last = SDL_GetTicksNS(); // loading ROM needs a reset in timing
 	SDL_SetAtomicInt(&app.running, true);
