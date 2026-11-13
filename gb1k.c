@@ -809,7 +809,7 @@ static void save_battery_ram(void) {
 // initialize the GameBoy
 static void init_gameboy(const char *filename) {
 	// reset GameBoy state and check if we have to query for a ROM
-	if (gb.mem.rom) SDL_free(gb.mem.rom);
+	if (gb.mem.rom) { SDL_free(gb.mem.rom); save_battery_ram(); }
 	gb = (struct gb_t){0};
 	// load the ROM file and setup banking
 	size_t bytes;
