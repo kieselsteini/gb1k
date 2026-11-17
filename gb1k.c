@@ -862,7 +862,7 @@ static void load_rom_dialog(void) {
 SDL_AppResult SDL_AppInit(void **appstate, int argc, char **argv) {
 	(void)appstate;
 	// init core system
-	app = (struct app_t){0};
+	app = (struct app_t){ .running = true };
 	gb = (struct gb_t){0};
 	if (setjmp(app.error)) return SDL_APP_FAILURE;
 	if (!SDL_Init(SDL_INIT_AUDIO | SDL_INIT_VIDEO | SDL_INIT_GAMEPAD | SDL_INIT_EVENTS)) fail("SDL_Init() error: %s", SDL_GetError());
